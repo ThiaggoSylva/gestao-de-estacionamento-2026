@@ -15,7 +15,7 @@ A API encerra o startup antes de abrir qualquer endpoint quando uma configuraç�
 | `SyntheticAccounts__CashierPassword` | Ao provisionar conta sintética local | Senha fornecida por canal local seguro; nunca versionada. |
 | `SyntheticAccounts__AdministratorPassword` | Ao provisionar conta sintética local | Senha fornecida por canal local seguro; nunca versionada. |
 
-A duração de inatividade da sessão pode ser configurada por `Authentication__IdleTimeoutSeconds` (padrão local de 1200 segundos).
+A duração de inatividade da sessão pode ser configurada por `Authentication__IdleTimeoutSeconds` (padrão local de 1200 segundos). O limite de tentativas de login por janela de um minuto pode ser ajustado por `Authentication__LoginPermitLimit` (padrão 5); o harness Playwright eleva esse limite somente para permitir as trocas de perfil das jornadas locais, sem alterar o padrão da aplicação.
 
 Em `Development`, o startup da API aplica migrações pendentes e provisiona idempotentemente as três contas/papéis sintéticos antes de abrir endpoints. Falha de conexão ou ausência de qualquer senha impede o startup. Senhas vêm do User Secrets/ambiente e não são redefinidas para contas já existentes. Fora de `Development` não há migração nem provisionamento automático; o comando legado `dotnet run --project backend/src/Estacionamento.Api -- --provision-synthetic-accounts` permanece disponível somente no ambiente local.
 
@@ -47,6 +47,6 @@ ConnectionStrings__Identity="$IDENTITY_TEST_CONNECTION" dotnet dotnet-ef migrati
 ConnectionStrings__Identity="$IDENTITY_TEST_CONNECTION" dotnet dotnet-ef database update --project src/Estacionamento.Infrastructure/Estacionamento.Infrastructure.csproj --startup-project src/Estacionamento.Api/Estacionamento.Api.csproj
 ```
 
-Para verificar reconstrução em banco vazio, defina `TEST_MIGRATION_SQLSERVER_CONNECTION` apontando para um banco de teste dedicado e execute `dotnet test Estacionamento.slnx`. O teste aplica as migrações e confere que o esquema contém somente as tabelas técnicas do Identity. A execução CI usa instância SQL Server efêmera e base de migração separada; nunca aponte esses testes a dados de produção.
+Para verificar reconstrução em banco vazio, defina `TEST_MIGRATION_SQLSERVER_CONNECTION` apontando para um banco de teste dedicado e execute `dotnet test Estacionamento.slnx`. O teste aplica todas as migrações e exige tanto as tabelas técnicas do Identity quanto as tabelas operacionais (vagas, tarifas, atendimentos, ocupações, pedidos, cobranças, pagamentos, ajustes, autorizações, vistorias, auditoria e idempotência), além dos índices filtrados de ocupação. A execução CI usa instância SQL Server efêmera e base de migração separada; nunca aponte esses testes a dados de produção.
 
 Os testes de integração iniciam a API em `Testing`, sem carregar User Secrets nem executar o bootstrap local; exigem `TEST_SQLSERVER_CONNECTION` e as senhas de teste acima. O harness E2E inicia a API em `Development` com banco de teste próprio e passa as três senhas via ambiente, exercitando também a migração e o provisionamento automáticos.
