@@ -4,46 +4,63 @@
 
 <div class="min-h-screen bg-slate-50">
   <header class="border-b border-slate-200 bg-white">
-    <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+    <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
       <a class="font-semibold tracking-tight text-slate-900" href="/" aria-label="Estacionamento — início">
         Estacionamento<span class="text-emerald-700">.</span>
       </a>
-      <span class="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800">
-        Ambiente local
-      </span>
-    </div>
-  </header>
 
-  <main id="main-content" class="mx-auto grid max-w-6xl gap-12 px-6 py-16 lg:grid-cols-[1fr_24rem] lg:items-center" tabindex="-1">
-    <section class="max-w-2xl" aria-labelledby="page-title">
-      <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-sm text-emerald-900">
-        <svg lucideShieldCheck aria-hidden="true" class="size-4"></svg>
-        Fundação da aplicação
-      </div>
-      <h1 id="page-title" class="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-        Operação segura começa aqui.
-      </h1>
-      <p class="mt-5 max-w-xl text-lg leading-8 text-slate-600">
-        Acesse com sua conta de funcionário provisionada para continuar.
-      </p>
       @if (session(); as currentSession) {
-        <div class="mt-9 rounded-xl border border-emerald-200 bg-white p-5 shadow-sm" aria-live="polite">
-          <p class="text-sm font-medium text-slate-500">Sessão ativa</p>
-          <p class="mt-1 font-semibold text-slate-900">{{ currentSession.userName }}</p>
-          <p class="mt-1 text-sm text-slate-600">Perfis: {{ currentSession.roles.join(', ') }}</p>
-          <button class="mt-5 rounded-lg bg-slate-900 px-4 py-2.5 font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:opacity-60" type="button" [disabled]="busy()" (click)="logout()">
+        <nav aria-label="Operação" class="flex flex-wrap items-center gap-1 text-sm">
+          <a routerLink="/" routerLinkActive="bg-emerald-50 text-emerald-900" [routerLinkActiveOptions]="{ exact: true }" class="rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100">Painel</a>
+          @if (currentSession.roles.includes('caixa') || currentSession.roles.includes('admin')) {
+            <a routerLink="/check-in" routerLinkActive="bg-emerald-50 text-emerald-900" class="rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100">Entrada</a>
+          }
+          <a routerLink="/search" routerLinkActive="bg-emerald-50 text-emerald-900" class="rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100">Buscar</a>
+          <a routerLink="/queue" routerLinkActive="bg-emerald-50 text-emerald-900" class="rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100">Fila</a>
+          @if (isAdministrator()) {
+            <a routerLink="/admin" routerLinkActive="bg-emerald-50 text-emerald-900" class="rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100">Administração</a>
+          }
+        </nav>
+
+        <div class="flex items-center gap-4 text-sm">
+          <div class="text-right">
+            <p class="font-medium text-emerald-800">Sessão ativa</p>
+            <p class="text-slate-600">{{ currentSession.userName }}</p>
+            <p class="text-xs text-slate-500">{{ currentSession.roles.join(', ') }}</p>
+          </div>
+          <button class="rounded-lg border border-slate-300 px-3 py-2 font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:opacity-60" type="button" [disabled]="busy()" (click)="logout()">
             {{ busy() ? 'Encerrando…' : 'Encerrar sessão' }}
           </button>
         </div>
       } @else {
-        <div class="mt-9 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Estado da fundação">
-          <p class="text-sm font-medium text-slate-500">Estado</p>
-          <p class="mt-1 text-base font-semibold text-slate-900">Interface inicial disponível</p>
-        </div>
+        <span class="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800">Ambiente local</span>
       }
-    </section>
+    </div>
+  </header>
 
-    @if (!session()) {
+  @if (session()) {
+    <main id="main-content" class="mx-auto max-w-7xl px-6 py-8" tabindex="-1">
+      <router-outlet />
+    </main>
+  } @else {
+    <main id="main-content" class="mx-auto grid max-w-6xl gap-12 px-6 py-16 lg:grid-cols-[1fr_24rem] lg:items-center" tabindex="-1">
+      <section class="max-w-2xl" aria-labelledby="page-title">
+        <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-sm text-emerald-900">
+          <svg lucideShieldCheck aria-hidden="true" class="size-4"></svg>
+          Operação de estacionamento
+        </div>
+        <h1 id="page-title" class="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+          Operação segura começa aqui.
+        </h1>
+        <p class="mt-5 max-w-xl text-lg leading-8 text-slate-600">
+          Acesse com sua conta de funcionário provisionada para continuar.
+        </p>
+        <div class="mt-9 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Estado da operação">
+          <p class="text-sm font-medium text-slate-500">Estado</p>
+          <p class="mt-1 text-base font-semibold text-slate-900">Interface de operação disponível</p>
+        </div>
+      </section>
+
       <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="login-title">
         <h2 id="login-title" class="text-xl font-semibold text-slate-950">Acesso de funcionário</h2>
         <p class="mt-2 text-sm text-slate-600">Use as credenciais fornecidas pelo administrador.</p>
@@ -74,6 +91,6 @@
           </button>
         </form>
       </section>
-    }
-  </main>
+    </main>
+  }
 </div>
