@@ -13,13 +13,17 @@ public sealed class TestApplicationFactory : WebApplicationFactory<Program>
 
     private readonly string environmentName;
 
-    public TestApplicationFactory(string environmentName = "Testing", string? connectionString = null, bool omitValetPassword = false)
+    public TestApplicationFactory(
+        string environmentName = "Testing",
+        string? connectionString = null,
+        bool omitValetPassword = false,
+        int idleTimeoutSeconds = 2)
     {
         this.environmentName = environmentName;
         SetEnvironmentVariable("ConnectionStrings__Identity", connectionString ?? Environment.GetEnvironmentVariable("TEST_SQLSERVER_CONNECTION"));
         SetEnvironmentVariable("Security__SpaOrigin", "https://localhost");
         SetEnvironmentVariable("DataProtection__KeyRingPath", KeyRingPath);
-        SetEnvironmentVariable("Authentication__IdleTimeoutSeconds", "2");
+        SetEnvironmentVariable("Authentication__IdleTimeoutSeconds", idleTimeoutSeconds.ToString());
         SetEnvironmentVariable("SyntheticAccounts__ValetPassword", omitValetPassword ? "" : Environment.GetEnvironmentVariable("TEST_VALET_PASSWORD"));
         SetEnvironmentVariable("SyntheticAccounts__CashierPassword", Environment.GetEnvironmentVariable("TEST_CASHIER_PASSWORD"));
         SetEnvironmentVariable("SyntheticAccounts__AdministratorPassword", Environment.GetEnvironmentVariable("TEST_ADMIN_PASSWORD"));
