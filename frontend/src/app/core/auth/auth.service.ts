@@ -1,33 +1,26 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
-import { AntiforgeryToken, EmployeeSession, LoginCredentials } from './auth.models';
+import { ApiClient } from '../http/api-client.service';
+import { EmployeeSession, LoginCredentials } from './auth.models';
 
 const sessionApi = '/api/v1/session';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly http = inject(HttpClient);
-  private readonly antiforgeryToken = signal<AntiforgeryToken | null>(null);
+  private readonly api = inject(ApiClient);
   readonly session = signal<EmployeeSession | null>(null);
 
   async login(credentials: LoginCredentials): Promise<EmployeeSession> {
-    const token = await this.getAntiforgeryToken();
-    const session = await firstValueFrom(this.http.post<EmployeeSession>(
-      `${sessionApi}/login`,
-      credentials,
-      {
-        headers: new HttpHeaders({ [token.headerName]: token.requestToken }),
-        withCredentials: true,
-      },
-    ));
+    const session = await this.api.send<EmployeeSession>('POST', `${sessionApi}/login`, credentials);
+    // The antiforgery token used for sign-in belongs to the anonymous identity.
+    // Commands issued after sign-in must use a token bound to the authenticated user.
+    await this.api.ensureAntiforgeryToken(true);
     this.session.set(session);
     return session;
   }
 
   async refreshSession(): Promise<EmployeeSession | null> {
     try {
-      const session = await firstValueFrom(this.http.get<EmployeeSession>(sessionApi, { withCredentials: true }));
+      const session = await this.api.get<EmployeeSession>(sessionApi);
       this.session.set(session);
       return session;
     } catch {
@@ -37,24 +30,13 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
-    const token = await this.getAntiforgeryToken();
-    await firstValueFrom(this.http.post<void>(
-      `${sessionApi}/logout`,
-      {},
-      {
-        headers: new HttpHeaders({ [token.headerName]: token.requestToken }),
-        withCredentials: true,
-      },
-    ));
+    await this.api.send<void>('POST', `${sessionApi}/logout`);
+    this.api.clearAntiforgeryToken();
     this.session.set(null);
   }
 
-  private async getAntiforgeryToken(): Promise<AntiforgeryToken> {
-    const token = await firstValueFrom(this.http.get<AntiforgeryToken>(
-      `${sessionApi}/antiforgery`,
-      { withCredentials: true },
-    ));
-    this.antiforgeryToken.set(token);
-    return token;
+  hasRole(...roles: string[]): boolean {
+    const current = this.session();
+    return current ? roles.some((role) => current.roles.includes(role)) : false;
   }
 }
