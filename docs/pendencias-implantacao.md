@@ -13,7 +13,9 @@ Este registro separa as verificações locais/CI das decisões necessárias para
 | Backup, recuperação e chaves | Operação/segurança (a designar) | Pendente — bloqueio de produção | Definir política e retenção de backup; proteger/rotacionar chaves e testar restore de banco e key ring. |
 | RPO/RTO e disponibilidade | Operação (a designar) | Pendente — bloqueio de produção | Aprovar metas de recuperação/disponibilidade e demonstrar que o procedimento atende às metas. |
 | Contingência de falha de rede/serviço | Operação (a designar) | Pendente — bloqueio de produção | Aprovar procedimento operacional e ensaiá-lo antes da entrada em produção. |
-| Homologação Azure e validação de publicação | Infraestrutura/segurança e responsáveis de negócio (a designar) | Pendente | Provisionar e validar a topologia real e as jornadas em homologação antes de qualquer decisão de produção. |
+| Homologação Azure e validação de publicação | Infraestrutura/segurança e responsáveis de negócio (a designar) | Pendente — bloqueado por assinatura/tenant; IaC preparada | Provisionar e validar a topologia real e as jornadas em homologação antes de qualquer decisão de produção. |
+
+A preparação de IaC, scripts e workflow está em [`infra/azure/README.md`](../infra/azure/README.md). Ela não cria recursos nem altera os estados acima: a conta Azure disponível não tinha assinatura acessível e o login foi recusado por security defaults. A primeira execução real, as validações de cookies/CSRF/headers/origens/ingress e as aprovações continuam pendentes.
 
 ## Limites do marco local
 
