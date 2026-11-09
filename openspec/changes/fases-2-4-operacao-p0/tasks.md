@@ -44,4 +44,4 @@
 ## 7. Entrega
 
 - [x] 7.1 Revisar diffs, executar verificações finais e registrar decisões/limitações no PR.
-- [ ] 7.2 Criar commits atômicos e abrir PR da feature branch para `main` usando o template do repositório; não publicar nem fazer merge sem revisão/aprovações.
+- [x] 7.2 Criar commits atômicos e abrir PR da feature branch para `main` usando o template do repositório; não publicar nem fazer merge sem revisão/aprovações.
