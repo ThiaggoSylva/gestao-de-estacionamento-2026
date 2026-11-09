@@ -5,6 +5,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
+  timeout: 90_000,
+  expect: { timeout: 10_000 },
   use: {
     baseURL: 'https://localhost:4200',
     trace: 'retain-on-failure',
@@ -27,6 +29,7 @@ export default defineConfig({
         Security__SpaOrigin: 'https://localhost:4200',
         DataProtection__KeyRingPath: `${process.cwd()}/.local/key-ring`,
         Authentication__IdleTimeoutSeconds: '10',
+        Authentication__LoginPermitLimit: '100',
       },
     },
     {

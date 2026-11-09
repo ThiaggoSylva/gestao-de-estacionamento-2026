@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Estacionamento.Api.Controllers;
+using Estacionamento.Domain.Identity;
 using Estacionamento.Infrastructure.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;

@@ -1,3 +1,4 @@
+using Estacionamento.Domain.Identity;
 using Estacionamento.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;

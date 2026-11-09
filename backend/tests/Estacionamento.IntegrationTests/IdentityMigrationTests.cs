@@ -9,7 +9,7 @@ namespace Estacionamento.IntegrationTests;
 public sealed class IdentityMigrationTests
 {
     [TestMethod]
-    public async Task Initial_migration_creates_only_identity_tables_in_sql_server()
+    public async Task Migrations_create_identity_and_operations_tables_in_sql_server()
     {
         var configuredConnection = Environment.GetEnvironmentVariable("TEST_MIGRATION_SQLSERVER_CONNECTION")
             ?? Environment.GetEnvironmentVariable("TEST_SQLSERVER_CONNECTION")
@@ -43,7 +43,7 @@ public sealed class IdentityMigrationTests
                 "SELECT TABLE_NAME AS [Value] FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
             .ToListAsync();
 
-        var expectedIdentityTables = new HashSet<string>(StringComparer.Ordinal)
+        var expectedTables = new HashSet<string>(StringComparer.Ordinal)
         {
             "AspNetRoles",
             "AspNetRoleClaims",
@@ -52,11 +52,26 @@ public sealed class IdentityMigrationTests
             "AspNetUserLogins",
             "AspNetUserRoles",
             "AspNetUserTokens",
-            "__EFMigrationsHistory"
+            "__EFMigrationsHistory",
+            "AuditEntries",
+            "Adjustments",
+            "Charges",
+            "ExceptionAuthorizations",
+            "IdempotencyRecords",
+            "Inspections",
+            "Occupancies",
+            "ParkingSessions",
+            "ParkingSpots",
+            "Payments",
+            "Tariffs",
+            "WithdrawalRequests"
         };
-        CollectionAssert.IsSubsetOf(tables.ToArray(), expectedIdentityTables.ToArray());
-        CollectionAssert.IsSubsetOf(
-            new[] { "AspNetUsers", "AspNetRoles", "AspNetUserRoles", "__EFMigrationsHistory" },
-            tables.ToArray());
+        CollectionAssert.IsSubsetOf(expectedTables.ToArray(), tables.ToArray());
+
+        var filteredIndexes = await db.Database.SqlQueryRaw<string>(
+                "SELECT name AS [Value] FROM sys.indexes WHERE has_filter = 1")
+            .ToListAsync();
+        CollectionAssert.Contains(filteredIndexes.ToArray(), "IX_Occupancies_ParkingSpotId");
+        CollectionAssert.Contains(filteredIndexes.ToArray(), "IX_Occupancies_ParkingSessionId");
     }
 }

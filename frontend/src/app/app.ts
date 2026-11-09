@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { email, form, FormField, required, submit } from '@angular/forms/signals';
+import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { LucideShieldCheck } from '@lucide/angular';
 import { AuthService } from './core/auth/auth.service';
 
@@ -10,7 +11,7 @@ interface LoginModel {
 }
 
 @Component({
-  imports: [FormField, LucideShieldCheck],
+  imports: [FormField, RouterLink, RouterLinkActive, RouterOutlet, LucideShieldCheck],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',
@@ -18,6 +19,7 @@ interface LoginModel {
 export class App implements OnInit {
   private readonly auth = inject(AuthService);
   protected readonly session = this.auth.session;
+  protected readonly isAdministrator = computed(() => this.session()?.roles.includes('admin') ?? false);
   protected readonly busy = signal(false);
   protected readonly errorMessage = signal('');
   protected readonly loginModel = signal<LoginModel>({ email: '', password: '' });
