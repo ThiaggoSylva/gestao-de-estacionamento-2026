@@ -1,0 +1,280 @@
+name: azure-hml
+
+on:
+  workflow_dispatch:
+    inputs:
+      resourceGroup:
+        description: Resource group de homologacao
+        required: true
+        default: rg-estacionamento-hml
+        type: string
+      location:
+        description: Regiao do App Service e do Azure SQL
+        required: true
+        default: brazilsouth
+        type: string
+      swaLocation:
+        description: Regiao do Azure Static Web Apps
+        required: true
+        default: eastus2
+        type: string
+      namePrefix:
+        description: Prefixo dos recursos
+        required: true
+        default: estac-hml
+        type: string
+      confirm:
+        description: Digite HOMOLOGACAO para confirmar a criacao de recursos faturaveis
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: azure-hml-${{ inputs.resourceGroup }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: azure-hml
+    steps:
+      - name: Validar confirmacao
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "HOMOLOGACAO" ]; then
+            echo "Confirmacao invalida. Digite HOMOLOGACAO para criar recursos de homologacao."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Instalar extensao staticwebapp
+        run: az extension add --name staticwebapp --only-show-errors || true
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Obter IP do runner
+        id: runner_ip
+        run: echo "value=$(curl -fsS https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+
+      - name: Gerar parametros do deploy
+        env:
+          NAME_PREFIX: ${{ inputs.namePrefix }}
+          LOCATION: ${{ inputs.location }}
+          SWA_LOCATION: ${{ inputs.swaLocation }}
+          SQL_ADMIN_LOGIN: ${{ vars.AZURE_SQL_ADMIN_LOGIN }}
+          SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
+          VALET_PASSWORD: ${{ secrets.SYNTHETIC_VALET_PASSWORD }}
+          CASHIER_PASSWORD: ${{ secrets.SYNTHETIC_CASHIER_PASSWORD }}
+          ADMIN_PASSWORD: ${{ secrets.SYNTHETIC_ADMIN_PASSWORD }}
+          DEPLOY_CLIENT_IP: ${{ steps.runner_ip.outputs.value }}
+        run: |
+          if [ -z "$SQL_ADMIN_LOGIN" ] || [ -z "$SQL_ADMIN_PASSWORD" ]; then
+            echo "Configure AZURE_SQL_ADMIN_LOGIN (variable) e AZURE_SQL_ADMIN_PASSWORD (secret)."
+            exit 1
+          fi
+          if [ -z "$VALET_PASSWORD" ] || [ -z "$CASHIER_PASSWORD" ] || [ -z "$ADMIN_PASSWORD" ]; then
+            echo "Configure as tres senhas sinteticas nos secrets."
+            exit 1
+          fi
+          if ! [[ "$NAME_PREFIX" =~ ^[A-Za-z0-9-]{3,20}$ ]] || [[ "$NAME_PREFIX" == -* ]] || [[ "$NAME_PREFIX" == *- ]]; then
+            echo "namePrefix deve ter de 3 a 20 caracteres alfanumericos ou hifens, sem hifen no inicio ou no fim."
+            exit 1
+          fi
+          if [[ "$SQL_ADMIN_LOGIN" == *";"* || "$SQL_ADMIN_LOGIN" == *"="* || "$SQL_ADMIN_LOGIN" == *$'\n'* ]]; then
+            echo "AZURE_SQL_ADMIN_LOGIN nao pode conter ';', '=' ou quebra de linha."
+            exit 1
+          fi
+          if [[ "$SQL_ADMIN_PASSWORD" == *";"* || "$SQL_ADMIN_PASSWORD" == *"'"* || "$SQL_ADMIN_PASSWORD" == *'"'* || "$SQL_ADMIN_PASSWORD" == *$'\n'* ]]; then
+            echo "AZURE_SQL_ADMIN_PASSWORD nao pode conter ';', aspas ou quebra de linha."
+            exit 1
+          fi
+          jq -n \
+            --arg namePrefix "$NAME_PREFIX" \
+            --arg location "$LOCATION" \
+            --arg swaLocation "$SWA_LOCATION" \
+            --arg sqlAdminLogin "$SQL_ADMIN_LOGIN" \
+            --arg sqlAdminPassword "$SQL_ADMIN_PASSWORD" \
+            --arg valetPassword "$VALET_PASSWORD" \
+            --arg cashierPassword "$CASHIER_PASSWORD" \
+            --arg adminPassword "$ADMIN_PASSWORD" \
+            --arg deployClientIp "$DEPLOY_CLIENT_IP" \
+            '{
+              "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+              contentVersion: "1.0.0.0",
+              parameters: {
+                namePrefix: { value: $namePrefix },
+                location: { value: $location },
+                swaLocation: { value: $swaLocation },
+                sqlAdminLogin: { value: $sqlAdminLogin },
+                sqlAdminPassword: { value: $sqlAdminPassword },
+                valetPassword: { value: $valetPassword },
+                cashierPassword: { value: $cashierPassword },
+                adminPassword: { value: $adminPassword },
+                deployClientIp: { value: $deployClientIp }
+              }
+            }' > "$RUNNER_TEMP/azure-hml.parameters.json"
+
+      - name: Criar resource group
+        env:
+          RESOURCE_GROUP: ${{ inputs.resourceGroup }}
+          LOCATION: ${{ inputs.location }}
+        run: |
+          az group create \
+            --name "$RESOURCE_GROUP" \
+            --location "$LOCATION" \
+            --output none
+
+      - name: Implantar infraestrutura
+        id: deploy
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ inputs.resourceGroup }}
+          deploymentName: hml-${{ github.run_id }}
+          template: infra/azure/main.bicep
+          parameters: ${{ runner.temp }}/azure-hml.parameters.json
+
+      - name: Ler outputs do deploy
+        id: outputs
+        env:
+          RESOURCE_GROUP: ${{ inputs.resourceGroup }}
+        run: |
+          az deployment group show \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "hml-${GITHUB_RUN_ID}" \
+            --query properties.outputs \
+            --output json > "$RUNNER_TEMP/deployment-outputs.json"
+          echo "api_app=$(jq -r '.apiAppName.value' "$RUNNER_TEMP/deployment-outputs.json")" >> "$GITHUB_OUTPUT"
+          echo "api_url=$(jq -r '.apiUrl.value' "$RUNNER_TEMP/deployment-outputs.json")" >> "$GITHUB_OUTPUT"
+          echo "spa_name=$(jq -r '.spaName.value' "$RUNNER_TEMP/deployment-outputs.json")" >> "$GITHUB_OUTPUT"
+          echo "spa_url=$(jq -r '.spaUrl.value' "$RUNNER_TEMP/deployment-outputs.json")" >> "$GITHUB_OUTPUT"
+          echo "sql_fqdn=$(jq -r '.sqlServerFqdn.value' "$RUNNER_TEMP/deployment-outputs.json")" >> "$GITHUB_OUTPUT"
+          echo "database_name=$(jq -r '.databaseName.value' "$RUNNER_TEMP/deployment-outputs.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar API
+        run: |
+          dotnet publish backend/src/Estacionamento.Api/Estacionamento.Api.csproj \
+            --configuration Release \
+            --output "$RUNNER_TEMP/api" \
+            --nologo
+          cd "$RUNNER_TEMP/api"
+          zip -r "$RUNNER_TEMP/api.zip" .
+
+      - name: Implantar API
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ steps.outputs.outputs.api_app }}
+          package: ${{ runner.temp }}/api.zip
+
+      - name: Aplicar migracoes e contas sinteticas
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          DataProtection__KeyRingPath: ${{ runner.temp }}/key-ring
+          Security__SpaOrigin: ${{ steps.outputs.outputs.spa_url }}
+          SyntheticAccounts__ValetPassword: ${{ secrets.SYNTHETIC_VALET_PASSWORD }}
+          SyntheticAccounts__CashierPassword: ${{ secrets.SYNTHETIC_CASHIER_PASSWORD }}
+          SyntheticAccounts__AdministratorPassword: ${{ secrets.SYNTHETIC_ADMIN_PASSWORD }}
+          SQL_FQDN: ${{ steps.outputs.outputs.sql_fqdn }}
+          SQL_DATABASE: ${{ steps.outputs.outputs.database_name }}
+          SQL_ADMIN_LOGIN: ${{ vars.AZURE_SQL_ADMIN_LOGIN }}
+          SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
+        run: |
+          mkdir -p "$DataProtection__KeyRingPath"
+          export ConnectionStrings__Identity="Server=tcp:${SQL_FQDN},1433;Initial Catalog=${SQL_DATABASE};Persist Security Info=False;User ID=${SQL_ADMIN_LOGIN};Password=${SQL_ADMIN_PASSWORD};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+          dotnet run \
+            --project backend/src/Estacionamento.Api/Estacionamento.Api.csproj \
+            --configuration Release \
+            --no-launch-profile \
+            -- --provision-synthetic-accounts
+
+      - name: Remover firewall rule do runner
+        if: always()
+        env:
+          RESOURCE_GROUP: ${{ inputs.resourceGroup }}
+        run: |
+          rm -f "$RUNNER_TEMP/azure-hml.parameters.json"
+          SQL_NAME=$(az sql server list \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[0].name" \
+            --output tsv 2>/dev/null || true)
+          if [ -n "$SQL_NAME" ]; then
+            az sql server firewall-rule delete \
+              --resource-group "$RESOURCE_GROUP" \
+              --server "$SQL_NAME" \
+              --name AllowDeployClient \
+              --output none 2>/dev/null || true
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Publicar SPA
+        env:
+          RESOURCE_GROUP: ${{ inputs.resourceGroup }}
+          SPA_NAME: ${{ steps.outputs.outputs.spa_name }}
+          API_APP: ${{ steps.outputs.outputs.api_app }}
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          TOKEN=$(az staticwebapp secrets list \
+            --name "$SPA_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.apiKey \
+            --output tsv)
+          npx --yes --package @azure/static-web-apps-cli swa deploy \
+            dist/frontend/browser \
+            --deployment-token "$TOKEN" \
+            --env production
+          az webapp restart \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$API_APP" \
+            --output none
+
+      - name: Smoke tests
+        env:
+          SPA_URL: ${{ steps.outputs.outputs.spa_url }}
+          API_URL: ${{ steps.outputs.outputs.api_url }}
+        run: |
+          ok=0
+          for attempt in $(seq 1 8); do
+            body=$(curl -sS "$SPA_URL/api/v1/session/antiforgery" || true)
+            if echo "$body" | jq -e '.requestToken' >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "API via SPA nao retornou um token antiforgery valido."
+            exit 1
+          fi
+
+          direct=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/healthz" || true)
+          echo "Acesso direto a API: $direct"
+          if ! [[ "$direct" =~ ^[0-9]{3}$ ]]; then
+            echo "Nao foi possivel obter o status da API direta."
+            exit 1
+          fi
+          if [ "$direct" -lt 400 ]; then
+            echo "A API direta nao esta bloqueada pelo linked backend."
+            exit 1
+          fi
+
+          echo "Homologacao validada em $SPA_URL"
