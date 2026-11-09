@@ -1,5 +1,13 @@
+using System.Text.Json.Serialization;
 using Estacionamento.Api.Configuration;
+using Estacionamento.Api.ErrorHandling;
+using Estacionamento.Api.Security;
+using Estacionamento.Application.Common;
+using Estacionamento.Application.Operations;
+using Estacionamento.Infrastructure.Common;
 using Estacionamento.Infrastructure.Identity;
+using Estacionamento.Infrastructure.Persistence;
+using Estacionamento.Infrastructure.Security;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -65,14 +73,39 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.SameSite = SameSiteMode.Strict;
 });
+var loginPermitLimit = builder.Configuration.GetValue("Authentication:LoginPermitLimit", 5);
 builder.Services.AddRateLimiter(options =>
     options.AddFixedWindowLimiter("login", limiter =>
     {
-        limiter.PermitLimit = 5;
+        limiter.PermitLimit = loginPermitLimit;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     }));
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IClock, SystemClock>();
+builder.Services.AddSingleton<IPublicIdGenerator, PublicIdGenerator>();
+builder.Services.AddSingleton<IDocumentProtector, DataProtectionDocumentProtector>();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
+builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
+builder.Services.AddScoped<OperationsRepository>();
+builder.Services.AddScoped<IParkingSpotRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<ITariffRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IParkingSessionRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IWithdrawalRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IChargeRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IPaymentRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IAdjustmentRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IAuthorizationRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IAuditRepository>(provider => provider.GetRequiredService<OperationsRepository>());
+builder.Services.AddScoped<IOperationsQueries, OperationsQueries>();
+builder.Services.AddScoped<IdempotentOperationExecutor>();
+builder.Services.AddScoped<AdministrationService>();
+builder.Services.AddScoped<AttendanceService>();
+builder.Services.AddScoped<WithdrawalService>();
+builder.Services.AddScoped<SettlementService>();
 
 var app = builder.Build();
 
@@ -103,6 +136,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedProto,
     ForwardLimit = 1
 });
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.Use(async (context, next) =>
